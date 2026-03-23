@@ -1,0 +1,33 @@
+{
+  "name": "MKF Aghal - Food Delivery",
+  "short_name": "MKF Aghal",
+  "description": "Order delicious food from MKF Aghal restaurant",
+  "start_url": "/mkf-aghal/mkf-aghal.html",
+  "display": "standalone",
+  "background_color": "#0A0A0A",
+  "theme_color": "#FF5200",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "mkf-aghal.html",
+      "sizes": "390x844",
+      "type": "image/png"
+    }
+  ],
+  "categories": ["food", "shopping"],
+  "lang": "en"
+}
