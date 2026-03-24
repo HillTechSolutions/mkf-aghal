@@ -743,7 +743,8 @@ var FLOW=[
   {k:'ready',     lb:'Ready',      col:'var(--green2)', nx:'picked_up',  act:'RIDER PICKED UP'},
   {k:'picked_up', lb:'On the Way', col:'var(--green)',  nx:'delivered',  act:'MARK DELIVERED'},
   {k:'delivered', lb:'Delivered',  col:'var(--muted2)', nx:null,         act:null},
-  {k:'rejected',  lb:'Rejected',   col:'#FCA5A5',       nx:null,         act:null}
+  {k:'rejected',  lb:'Rejected',   col:'#FCA5A5',       nx:null,         act:null},
+  {k:'cancelled', lb:'Cancelled',  col:'var(--muted)',   nx:null,         act:null}
 ];
 function getSt(k){ for(var i=0;i<FLOW.length;i++) if(FLOW[i].k===k) return FLOW[i]; return FLOW[0]; }
 function badgeCls(k){ var m={pending:'bd',confirmed:'bb',preparing:'bo',ready:'bg',picked_up:'bg',delivered:'bm',rejected:'br'}; return m[k]||'bm'; }
@@ -1016,7 +1017,7 @@ function scard(ic,lb,val,cls,trend,sub){
 function pgLive(){
   var orders=S.orders;
   /* Live Orders shows DELIVERY orders only — active only, not delivered */
-  var live=orders.filter(function(o){return ['pending','confirmed','preparing','ready','picked_up'].indexOf(o.ownerStatus)>-1;});
+  var live=orders.filter(function(o){return ['pending','confirmed','preparing','ready','picked_up','cancelled'].indexOf(o.ownerStatus)>-1;});
   var filtered=S.liveFilter==='all'?live:live.filter(function(o){return o.ownerStatus===S.liveFilter;});
   var pCnt=live.filter(function(o){return o.ownerStatus==='pending';}).length;
   var seen=S.seenIds.slice();
@@ -1035,7 +1036,7 @@ function pgLive(){
     if(prepCnt>0) h+='<button class="btn btn-gh btn-sm" data-action="ready-all">&#x1F4E6; READY ALL ('+prepCnt+')</button>';
     h+='</div>';
   }
-  var filters=['all','pending','confirmed','preparing','ready','picked_up'];
+  var filters=['all','pending','confirmed','preparing','ready','picked_up','cancelled'];
   h+='<div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:16px;">';
   filters.forEach(function(f){
     var cnt=f==='all'?live.length:live.filter(function(o){return o.ownerStatus===f;}).length;

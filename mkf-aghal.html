@@ -1606,8 +1606,14 @@ function TrackingScreen(props){
   },[order]);
   var cur=STEPS[step];
   var done=ownerStatus==="delivered";
-  var canCancel=!cancelled&&(ownerStatus==='pending'||ownerStatus==='confirmed');
-  var cancelMsg=ownerStatus==='preparing'?'Kitchen is already preparing your order':ownerStatus==='ready'||ownerStatus==='picked_up'?'Order is on its way — too late to cancel':ownerStatus==='delivered'?'Order already delivered':cancelled?'Order was cancelled':'';
+  var _liveStatus=ownerStatus;
+  try{
+    var _lo=JSON.parse(localStorage.getItem('mkf_orders')||'[]');
+    var _lof=_lo.find(function(x){return x.id===order.id;});
+    if(_lof) _liveStatus=_lof.ownerStatus;
+  }catch(e){}
+  var canCancel=!cancelled&&(_liveStatus==='pending'||_liveStatus==='confirmed');
+  var cancelMsg=_liveStatus==='preparing'?'Kitchen is already preparing your order':_liveStatus==='ready'||_liveStatus==='picked_up'?'Order is on its way — too late to cancel':_liveStatus==='delivered'?'Order already delivered':cancelled?'Order was cancelled':'';
   if(ownerRejected)return (
     <div className="screen" style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:40,textAlign:"center"}}>
       <div style={{fontSize:80,marginBottom:16}}>{"\uD83D\uDE1E"}</div>
@@ -1631,8 +1637,8 @@ function TrackingScreen(props){
           <div style={{textAlign:"center"}}>
             <div style={{fontSize:52,marginBottom:12}}>{"\u26A0\uFE0F"}</div>
             <h3 style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:24,color:C.white,letterSpacing:1,margin:"0 0 10px"}}>CANCEL ORDER?</h3>
-            <p style={{color:C.muted,fontSize:13,margin:"0 0 6px",lineHeight:1.6}}>This order can still be cancelled because the restaurant has not started preparing it yet.</p>
-            <p style={{color:C.red,fontSize:11,margin:"0 0 20px",fontWeight:700}}>Once the kitchen starts — cancellation is not possible.</p>
+            <p style={{color:C.muted,fontSize:13,margin:"0 0 6px",lineHeight:1.6}}>Cancel now — you have a 2-minute window from when you placed this order.</p>
+            <p style={{color:C.red,fontSize:11,margin:"0 0 20px",fontWeight:700}}>After 2 minutes the cancel window closes automatically.</p>
             <div style={{display:"flex",gap:10}}>
               <button onClick={function(){setShowCancel(false);}} style={{flex:1,background:C.card2,border:"1px solid "+C.border,borderRadius:12,padding:"12px",color:C.white,fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"'Nunito',sans-serif"}}>Keep Order</button>
               <button onClick={function(){
@@ -1646,6 +1652,18 @@ function TrackingScreen(props){
                     setOwnerStatus(st);
                     return;
                   }
+                }catch(e){}
+                /* Write cancellation to mkf_orders so dashboard knows */
+                try{
+                  var ordList=JSON.parse(localStorage.getItem('mkf_orders')||'[]');
+                  var ordIdx=ordList.findIndex(function(x){return x.id===order.id;});
+                  if(ordIdx>-1){ ordList[ordIdx].ownerStatus='cancelled'; ordList[ordIdx].cancelledAt=Date.now(); }
+                  localStorage.setItem('mkf_orders',JSON.stringify(ordList));
+                  /* Update history too */
+                  var hist=JSON.parse(localStorage.getItem('mkf_history')||'[]');
+                  var hIdx=hist.findIndex(function(x){return x.id===order.id;});
+                  if(hIdx>-1){ hist[hIdx].ownerStatus='cancelled'; }
+                  localStorage.setItem('mkf_history',JSON.stringify(hist));
                 }catch(e){}
                 setCancelled(true);setShowCancel(false);
               }} style={{flex:1,background:C.red,border:"none",borderRadius:12,padding:"12px",color:"#fff",fontSize:14,fontWeight:800,cursor:"pointer",fontFamily:"'Nunito',sans-serif"}}>Yes, Cancel</button>
@@ -1686,31 +1704,7 @@ function TrackingScreen(props){
               <Ico n="phone" size={18} color="#fff"/>
             </button>
           </div>
-          {canCancel&&(
-            <button onClick={function(){
-              /* Re-read LIVE status from localStorage before showing cancel dialog */
-              try{
-                var liveOrders=JSON.parse(localStorage.getItem('mkf_orders')||'[]');
-                var liveOrder=liveOrders.find(function(x){return x.id===order.id;});
-                var liveStatus=liveOrder?liveOrder.ownerStatus:'pending';
-                var blockStatuses=['preparing','ready','picked_up','delivered'];
-                if(blockStatuses.indexOf(liveStatus)>-1){
-                  var msgs={preparing:'Kitchen is already preparing your order',ready:'Order is ready — cannot cancel',picked_up:'Rider has already picked up your order',delivered:'Order already delivered'};
-                  alert(msgs[liveStatus]||'Cannot cancel at this stage');
-                  setOwnerStatus(liveStatus); /* sync state */
-                  return;
-                }
-              }catch(e){}
-              setShowCancel(true);
-            }} style={{width:"100%",background:C.red+"11",border:"1px solid "+C.red+"44",borderRadius:12,padding:"12px",color:C.red,fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"'Nunito',sans-serif"}}>
-              Cancel Order
-            </button>
-          )}
-          {!canCancel&&cancelMsg&&(
-            <div style={{width:"100%",background:C.card2,border:"1px solid "+C.border,borderRadius:12,padding:"10px 14px",textAlign:"center"}}>
-              <p style={{color:C.muted,fontSize:12,fontWeight:700,margin:0}}>{"\uD83D\uDEAB"} {cancelMsg}</p>
-            </div>
-          )}
+
         </div>
         <div style={{flex:"0 0 260px",display:"flex",flexDirection:"column",gap:12}}>
           <div style={{background:C.card,borderRadius:16,padding:"15px 16px",border:"1px solid "+C.border}}>
@@ -1733,6 +1727,37 @@ function TrackingScreen(props){
             </button>
           )}
         </div>
+      </div>
+      {/* Cancel button - full width at bottom */}
+      <div style={{padding:"0 20px 80px"}}>
+        {(function(){
+          if(cancelled) return null;
+          /* Cancel window: 2 minutes from order placement */
+          var CANCEL_WINDOW_MS=2*60*1000;
+          var orderAge=order&&order.timestamp?Date.now()-order.timestamp:999999;
+          var withinWindow=orderAge<CANCEL_WINDOW_MS;
+          var secsLeft=withinWindow?Math.max(0,Math.ceil((CANCEL_WINDOW_MS-orderAge)/1000)):0;
+          var minsLeft=Math.floor(secsLeft/60);
+          var secsPart=secsLeft%60;
+          var timeStr=minsLeft+"m "+secsPart+"s";
+          if(withinWindow){
+            return (
+              <div>
+                <button onClick={function(){setShowCancel(true);}}
+                  style={{width:"100%",background:C.red+"11",border:"1px solid "+C.red+"44",borderRadius:12,padding:"14px",color:C.red,fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"'Nunito',sans-serif",marginBottom:6}}>
+                  Cancel Order
+                </button>
+                <p style={{color:C.muted,fontSize:11,textAlign:"center",margin:0}}>{"⏱ Cancel window closes in "+timeStr}</p>
+              </div>
+            );
+          }
+          return (
+            <div style={{background:C.card2,border:"1px solid "+C.border,borderRadius:12,padding:"12px 14px",textAlign:"center"}}>
+              <p style={{color:C.muted,fontSize:12,fontWeight:700,margin:"0 0 2px"}}>{"🚫 Cannot Cancel"}</p>
+              <p style={{color:C.muted,fontSize:11,margin:0,opacity:0.7}}>Order accepted by kitchen — cancellation window has closed</p>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
