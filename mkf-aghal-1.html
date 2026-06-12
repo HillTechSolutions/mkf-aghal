@@ -1171,7 +1171,14 @@ function CartScreen(props){
           </div>
           </div>
         </div>
-        <button className="btn-hover" onClick={function(){if(minOk)setScreen("checkout");}} style={{width:"100%",background:minOk?"linear-gradient(135deg,"+C.orange+","+C.gold+")":"#333",border:"none",borderRadius:14,padding:"15px",color:minOk?"#000":"#666",fontFamily:"'Bebas Neue',sans-serif",fontSize:18,letterSpacing:2,cursor:minOk?"pointer":"not-allowed",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+        <button className="btn-hover" onClick={function(){
+          if(!minOk) return;
+          if(!cartIsDineIn&&!isRestaurantOpen()){
+            setToast&&setToast("Restaurant is closed — cannot checkout","error");
+            return;
+          }
+          setScreen("checkout");
+        }} style={{width:"100%",background:minOk?"linear-gradient(135deg,"+C.orange+","+C.gold+")":"#333",border:"none",borderRadius:14,padding:"15px",color:minOk?"#000":"#666",fontFamily:"'Bebas Neue',sans-serif",fontSize:18,letterSpacing:2,cursor:minOk?"pointer":"not-allowed",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
           CHECKOUT <Ico n="chevron" size={18} color={minOk?"#000":"#666"}/>
         </button>
         <button onClick={function(){goMenu();}} style={{width:"100%",background:"transparent",border:"1px solid "+C.border,borderRadius:12,padding:"12px",color:C.muted,fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"'Nunito',sans-serif"}}>+ Add More Items</button>
@@ -1329,6 +1336,11 @@ function CheckoutScreen(props){
     return Object.keys(e).length===0;
   }
   function handlePlace(){
+    /* Block order if restaurant is closed */
+    if(!isRestaurantOpen()){
+      setErrors({general:"Restaurant is currently closed. Please try again during opening hours."});
+      return;
+    }
     if(validate()){
       placeOrder({pay,time,name,city,village,street,phone,note,discount,
         deliveryFee:isDineIn?0:deliveryFee,
@@ -1778,13 +1790,17 @@ function TrackingScreen(props){
                     return;
                   }
                 }catch(e){}
-                /* Write cancellation to mkf_orders so dashboard knows */
+                /* Write cancellation to Firebase (syncs to dashboard) + localStorage */
                 try{
+                  var cancelUpdate={ownerStatus:'cancelled',cancelledAt:Date.now()};
+                  if(window.fbWriteOrder){
+                    /* Update existing order in Firebase */
+                    try{ if(window.MKF_DB) window.MKF_DB.ref('orders/'+order.id).update(cancelUpdate); }catch(e){}
+                  }
                   var ordList=JSON.parse(localStorage.getItem('mkf_orders')||'[]');
                   var ordIdx=ordList.findIndex(function(x){return x.id===order.id;});
                   if(ordIdx>-1){ ordList[ordIdx].ownerStatus='cancelled'; ordList[ordIdx].cancelledAt=Date.now(); }
                   localStorage.setItem('mkf_orders',JSON.stringify(ordList));
-                  /* Update history too */
                   var hist=JSON.parse(localStorage.getItem('mkf_history')||'[]');
                   var hIdx=hist.findIndex(function(x){return x.id===order.id;});
                   if(hIdx>-1){ hist[hIdx].ownerStatus='cancelled'; }
@@ -2262,7 +2278,16 @@ function App(){
     setThemeVer(function(v){return v+1;});
   };
   var[screen,setScreen]=useState("home");
-  useEffect(function(){ window.__mkfSetScreen=setScreen; },[setScreen]);
+  useEffect(function(){
+    window.__mkfSetScreen=setScreen;
+    /* Pull latest settings/menu/hours from Firebase into localStorage on load */
+    setTimeout(function(){
+      if(window.fbReadSettings) window.fbReadSettings(function(){});
+      if(window.fbReadMenu) window.fbReadMenu(function(){});
+      if(window.fbReadHours) window.fbReadHours(function(){});
+      if(window.fbReadOffers) window.fbReadOffers(function(){});
+    },1000);
+  },[setScreen]);
   var[dineInTable,setDineInTable]=useState("");
   useEffect(function(){
     window.__mkfSetDineIn=function(t){ setDineInTable(t); window.__mkfCurrentTable=t;
